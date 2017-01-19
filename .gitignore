@@ -1,0 +1,6 @@
+/.settings/
+/bin/
+/logs/
+*.swp
+*~
+*.bak
