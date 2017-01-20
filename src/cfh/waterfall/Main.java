@@ -4,10 +4,10 @@ import static java.awt.GridBagConstraints.*;
 import static java.lang.Math.*;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
@@ -15,6 +15,7 @@ import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.math.BigInteger;
 import java.util.BitSet;
 
@@ -33,7 +34,7 @@ import javax.swing.event.ChangeEvent;
 public class Main {
     
     private static final int MAX_BITS = 7;
-    private static final int MAX_WIDTH = 257;
+    private static final int MAX_WIDTH = 1025;
     private static final int MAX_LENGTH = 10_240;
 
     private static final int CELL_SIZE = 10;
@@ -54,6 +55,8 @@ public class Main {
     private final SpinnerNumberModel lengthModel;
     private final WaterfallSquare waterfall;
     
+    private double zoom = 1;
+    
     private int bits = 3;
     private int size = (int) Math.pow(2, bits);
     private BitSet rule = new BitSet(size);
@@ -71,17 +74,18 @@ public class Main {
         ruleNumber.setEditable(false);
         rulePanel = new JPanel(new GridLayout(0, 16, 6, 4));
         
-        widthModel = new SpinnerNumberModel(33, 1, MAX_WIDTH, 1);
+        widthModel = new SpinnerNumberModel(129, 1, MAX_WIDTH, 1);
         JSpinner widthSpinner = new JSpinner(widthModel);
         widthSpinner.addChangeListener(this::resize);
         
-        lengthModel = new SpinnerNumberModel(32, 1, MAX_LENGTH, 1);
+        lengthModel = new SpinnerNumberModel(64, 1, MAX_LENGTH, 1);
         JSpinner lengthSpinner = new JSpinner(lengthModel);
         lengthSpinner.addChangeListener(this::resize);
         
         waterfall = new WaterfallSquare();
         JScrollPane waterfallPane = new JScrollPane(waterfall);
         waterfallPane.setBorder(new TitledBorder("Waterfall"));
+        waterfallPane.addMouseWheelListener(this::mouseWheelMoved);
         
         JPanel input = new JPanel();
         input.setLayout(new GridBagLayout());
@@ -135,6 +139,15 @@ public class Main {
         int width = widthModel.getNumber().intValue();
         int length = lengthModel.getNumber().intValue();
         waterfall.changeSize(width, length);
+    }
+    
+    private void mouseWheelMoved(MouseWheelEvent ev) {
+        zoom *= pow(0.9, ev.getPreciseWheelRotation());
+        if (zoom < 0.1) zoom = 0.1;
+        if (zoom > 2) zoom = 2;
+        if (0.999 < zoom && zoom < 1.001) zoom = 1.0;
+        System.out.println(zoom);
+        resize(null);
     }
     
     
@@ -220,16 +233,16 @@ public class Main {
                 for (int i = 0; i < width; i += 1) {
                     data[i][0] = start.get(i);
                 }
-                setPreferredSize(new Dimension(width*CELL_SIZE, length*CELL_SIZE));
-                revalidate();
-                repaint();
             }
+            setPreferredSize(new Dimension((int)(width*CELL_SIZE*zoom), (int)(length*CELL_SIZE*zoom)));
+            revalidate();
+            repaint();
         }
         
         private void clicked(MouseEvent ev) {
-            if (ev.getY() <= CELL_SIZE) {
-                int x = ev.getX()/CELL_SIZE;
-                if (x < width && ev.getX() != x*CELL_SIZE) {
+            if (ev.getY() <= (CELL_SIZE+zoom)*zoom) {
+                int x = (int) (ev.getX()/zoom/CELL_SIZE);
+                if (x < width && ev.getX() != x*CELL_SIZE*zoom) {
                     data[x][0] ^= true;
                     start.set(x, data[x][0]);
                     repaint();
@@ -259,23 +272,29 @@ public class Main {
         
         @Override
         public void paint(Graphics g) {
-            for (int i = 0; i < length; i += 1) {
-                int y = 3 + i*CELL_SIZE;
-                for (int j = 0; j < width; j += 1) {
-                    int x = j*CELL_SIZE;
-                    if (i == 0) {
-                        if (2*j == width-1) {
-                            g.drawRect(x, y-3, CELL_SIZE, 4);
-                        } else if (2*j == width) {
-                            g.fillRect(x-2, y-3, 6, 3);
+            Graphics2D gg = (Graphics2D) g.create();
+            try {
+                gg.scale(zoom, zoom);
+                for (int i = 0; i < length; i += 1) {
+                    int y = 3 + i*CELL_SIZE;
+                    for (int j = 0; j < width; j += 1) {
+                        int x = j*CELL_SIZE;
+                        if (i == 0) {
+                            if (2*j == width-1) {
+                                gg.drawRect(x, y-3, CELL_SIZE, 4);
+                            } else if (2*j == width) {
+                                gg.fillRect(x-2, y-3, 6, 3);
+                            }
+                        }
+                        if (data[j][i]) {
+                            gg.fillRect(x, y, CELL_SIZE+1, CELL_SIZE+1);
+                        } else if (zoom > 0.42) {
+                            gg.drawRect(x, y, CELL_SIZE, CELL_SIZE);
                         }
                     }
-                    if (data[j][i]) {
-                        g.fillRect(x, y, CELL_SIZE+1, CELL_SIZE+1);
-                    } else {
-                        g.drawRect(x, y, CELL_SIZE, CELL_SIZE);
-                    }
                 }
+            } finally {
+                gg.dispose();
             }
         }
     }
